@@ -1,0 +1,195 @@
+---
+title: "ex2"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# 1. SMSAs
+
+## 1. inspect data
+```{r}
+url <- "http://stat.ethz.ch/Teaching/Datasets/mortality.csv"
+mortality <- read.csv(url, header = TRUE)
+mortality <- mortality[,-1]
+```
+
+use `splom()` in the lattice package to draw pairs plot: 
+
+```{r}
+# install.packages("lattice")
+library(lattice)
+splom(~mortality, pscales=0, cex=0.5)
+```
+
+The response variable mortality versus the predictor variables is the last row of the plot.
+
+As the Pop, HC, NOx, SO2 have skewed distributions, we log-transform them. 
+
+Now add log-transformation: 
+```{r}
+mortality_old <- mortality
+mortality[,"logPop"] <- log(mortality[,"Pop"])
+mortality[,"logHC"] <- log(mortality[,"HC"])
+mortality[,"logNOx"] <- log(mortality[,"NOx"])
+mortality[,"logSO2"] <- log(mortality[,"SO2"])
+col_num <- which( names(mortality) %in% c("Pop", "HC", "NOx", "SO2") )
+mortality <- mortality[,-col_num]
+```
+
+
+Now the scatter plot looks better: 
+```{r}
+splom(~mortality[,c("Mortality","logPop", "logHC", "logNOx", "logSO2")], pscales=0, cex=0.5, col="black")
+```
+
+
+
+Fit the data to linear model, fit the full model (i.e. use all predictor variables, starting point of backward selection): 
+```{r}
+mortal.full <- lm(Mortality~. , data=mortality)
+```
+
+Fit the empty model (starting point of forward selection):
+```{r}
+mortal.empty <- lm(Mortality~1, data=mortality)
+```
+
+###Tukey-Anscombe plot: fitted-value VS residuals. 
+
+```{r}
+plot(fitted(mortal.full), residuals(mortal.full),xlab="fitted value", ylab="residual", main="Tukey-Anscombe")
+abline(h=0, lty=2)
+```
+
+
+### QQ plot: empirical quantile VS standard quantiles
+```{r}
+qqnorm(resid(mortal.full), xlab="standard normal quantiles", ylab="empirical quantiles")
+qqline(resid(mortal.full), lty=2)
+```
+
+look at the fitting summary: 
+```{r}
+summary(mortal.full)
+```
+The summary statistic of the model reveals that only JanTemp, Tain, NonWhite, logNOx are significant on the response. 
+
+## 2. stepwise variable selection
+
+### backward selection
+```{r}
+mortal.bw <- step(mortal.full, dir="backward")
+```
+
+### forward selection
+```{r}
+motal.fw <- step(mortal.empty, dir="forward", scope = list(upper=mortal.full,lower=mortal.empty))
+```
+
+### all-subsets regression
+Both fw and bw are greedy algorithms, in each step it adds variables and never deletes them, although an addition of a new variable may render one or more of the already added variables non-significant. 
+
+Use the `leaps` package. 
+
+```{r}
+library(leaps)
+mortal.alls <- regsubsets(Mortality~., data=mortality, nvmax=9)
+
+source("ftp://stat.ethz.ch/Teaching/maechler/CompStat/cp-plot.R")
+p.regsubsets(mortal.alls, cex=0.8, cex.main=.8)
+```
+
+
+
+#2. mixture of two normal distributions
+Generate the mixture-distributed data: 
+```{r}
+set.seed(1)
+data <- numeric(100)
+for(i in 1:100){
+  p <- runif(1, min=0, max=1)
+  if(p<0.2)
+    data[i] <- rnorm(1, mean=0, sd=sqrt(0.01))
+  else 
+    data[i] <- rnorm(1, mean=2, sd=1)
+}
+hist(data)
+```
+
+another way to generate data withou loop: 
+```{r}
+n <- 100
+data <- ifelse(runif(n, min=0, max=1)<0.2,rnorm(n, mean=0, sd=sqrt(0.01)), rnorm(n, mean=2, sd=1))
+hist(data)
+```
+
+
+## a. best bandwidth with kernel density estimator
+
+The desity estimator is in `density()`.
+
+```{r}
+ke <- density(data, bw=0.1, n=61, from=-1, to = 5)
+summary(ke)
+```
+
+An estimated plug-in bandwidth is obtained by using `bw ="sj"`.
+
+
+`ke$x` are the points at which the estimate is to be computed, we can use the average error to estimate the IMSE: 
+
+```{r}
+true_density <- 0.2*dnorm(ke$x, mean=0, sd=sqrt(0.01))+0.8*dnorm(ke$x, mean=2, sd=1)
+quality <- mean((ke$y-true_density)^2)
+```
+
+
+## b. carry out simulation to evaluate quality of bandwidth
+
+before doing the 200 simulations, create variables to hold the results: 
+
+```{r}
+n <- 100
+bandwidths <- c(as.list(2^seq(-5,1,0.2)), "sj")
+sj <- numeric(200)
+qualities <- matrix(ncol=length(bandwidths), nrow=200)
+```
+For bandwidths we add the "sj" as last element. 
+
+```{r}
+for(i in 1:200){ # simulate 200 times
+  data <- ifelse(runif(n, min=0, max=1)<0.2,rnorm(n, mean=0, sd=sqrt(0.01)), rnorm(n, mean=2, sd=1))
+  for(j in seq_along(bandwidths)){
+    ke <- density(data, bw=bandwidths[[j]], n=61, from=-1, to=5)
+    qualities[i,j] <- mean((ke$y-true_density)^2)
+    if(bandwidths[[j]]=="sj") {sj[i] <- ke$bw}
+  }
+}
+```
+
+find the results: 
+
+```{r}
+sj.mean <- mean(sj)
+sj.mean
+
+results <- apply(qualities, 2, mean) # take col mean
+bandwidths[[which.min(results)]]
+```
+
+Then plot the bandwith VS quality curve, also plot the selected bandwidth selected with "sj" by a red point: 
+
+```{r}
+plot(2^seq(-5,1,0.2), results[-length(bandwidths)],xlab="bandwidth", ylab="quality", main="Guassian kernel result")
+points(sj.mean, results[length(bandwidths)], col="red")
+```
+
+
+
+
+
+
+

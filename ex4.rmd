@@ -1,0 +1,178 @@
+---
+title: "ex4: BMW return"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+Log return of bmw stock. 
+
+$X_t = log(Pt/Pt-1)=sigma_t * epsilon_t, sigma_t^2 = v(Xt-1)$
+```{r}
+bmwlr <- scan("http://stat.ethz.ch/Teaching/Datasets/bmw.dat") # X[1:1000]
+X <- bmwlr
+# plot the things out to have a feel
+plot(X, type="l")
+Y <- X^2 # Y = X^2 = v(Xt-1) + eta
+plot(Y, type="l")
+```
+
+## a) autocorrelation functions
+need to use the `acf` function, let's have a try first: 
+```{r}
+white_noise <- rnorm(1000)
+acf(white_noise)
+```
+So the acf plot give the corelation values for different lags. ex. the value of acf(X) at lag=1 is the corelation between Xt and Xt-1 . We see that if X is indp, `acf(X)` will be 0 for lag>0. 
+
+Let's plot the acf for X and X2: 
+```{r}
+par(mfrow=c(2,1))
+acf(X)
+acf(Y)
+```
+
+interpret: 
+>The ACF plot shows that autocorrelation among X t s is almost inexistent (but this does not imply that they are independent). These findings support our theoretical derivations from part a), namely that Cov (X t , X t−h ) = 0. Autocorrelation among X t 2 s is of higher order.
+
+
+## b) fit funciton v() via NW, LP, SS
+
+Yt = Xt^2 = v(Xt-1) + eta_t
+can only fit for Y[2:1000] because we don't have X[0], ie we need to feed `x=X[1:999], y=Y[2:1000]` to smoothers.
+
+```{r}
+x <- X[-length(X)]
+y <- Y[-1]
+fit_lp <- loess(y~x, span = 0.75)
+edf <- fit_lp$trace.hat # equivalent deg freedom for lp fit
+fit_ss <- smooth.spline(x, y, df=edf) # use the same df for spline fit 
+```
+
+ksmooth internally reorder its x input in increasing order, to recover it: 
+```{r}
+fit_nw <- ksmooth(x, y, bandwidth=3.54, x.points=x) # use x.points to get fitted value at design pts
+ox <- order(x)
+fit_nw$x <- fit_nw$x[order(ox)]
+fit_nw$y <- fit_nw$y[order(ox)]
+```
+
+**to get fitted values at design points**: 
+```{r}
+fitted_lp <- fitted(fit_lp)
+fitted_ss <- fitted(fit_ss)
+fitted_nw <- fit_nw$y
+```
+
+**to get the fitted values at other points**:
+```{r}
+newx <- seq(-15, 15, length=1000)
+fittednew_lp <- predict(fit_lp, newdata = newx)
+fittednew_ss <- predict(fit_ss, x=newx)$y # this predict is different from the above !
+# see: predict.loess and predict.smooth.spline in help! 
+fittednew_nw <- ksmooth(x, y,kernel="normal", bandwidth=3.54, x.points=newx)$y
+```
+
+
+### compare the 3 smoothers
+
+```{r}
+summary(x)
+summary(y)
+```
+
+plot the fit for whole data range and fit for only central region. 
+```{r}
+par(mfrow=c(2,1))
+plot(x,y, main="fitting whole range of data", col="gray", ylim=c(0,100))
+lines(newx, fittednew_nw, lty=1, col=1)
+lines(newx, fittednew_lp, lty=2, col=2)
+lines(newx, fittednew_ss, lty=3, col=3)
+legend(6, 70, legend = c("NW", "LP", "SS"), lty=1:3, col=1:3, cex=0.6)
+
+# plot only central region (xlim=7, ylim=10)
+plot(x,y, main="fitting central region of data", col="gray", xlim=c(-7,7), ylim=c(0,10))
+lines(newx, fittednew_nw, lty=1, col=1)
+lines(newx, fittednew_lp, lty=2, col=2)
+lines(newx, fittednew_ss, lty=3, col=3)
+legend(6, 70, legend = c("NW", "LP", "SS"), lty=1:3, col=1:3, cex=0.6)
+```
+
+remarks: 
+>No clear function pattern is visible, a slight U-shape is noticeable: large returns on the previous day leads to large volalities on next day. NW is determined by few points, hence its poor fit. LP and SS are smoother. 
+
+### check model assumption
+
+* residual VS time plot
+==> *we see the violation of indep assumption of residuals.*
+```{r}
+par(mfrow=c(3,1))
+# plot.ts is just plot(y-fitted_nw, main="residuals-NW", type="l"), with xlb="Time"
+plot.ts(y-fitted_nw, main="residuals-NW")
+plot.ts(y-fitted_lp, main="residuals-LP")
+plot.ts(y-fitted_ss, main="residuals-SS")
+```
+
+* Tukey-Anscombe plot
+==> large outliers
+
+* plot estimated volality (sqrt of the fitted value -- volality is s.d., not variance)
+```{r}
+par(mfrow=c(3,1))
+plot.ts(X, main="log-returns")
+plot.ts(sqrt(fitted_lp), main="estimated implied volalities(loess)")
+plot.ts(sqrt(fitted_lp), main="estimated implied volalities(smooth splines)")
+```
+
+c) fit the function with global/local opt bandwidth (glkerns and lokerns)
+have a look at the documentation for glkerns/lokerns --> 
+fitted value at design points = fitted(fit), and the x.out parameter should be NULL 
+fitted value at other points (x.out parameter) = fit$est. 
+
+==> to get the design pts and other pts, we need to construct 2 fits!!
+
+
+```{r}
+# install.packages("lokern")
+library(lokern)
+fit_glk <- glkerns(x,y, is.rand=F, hetero=F, x.out=newx)
+fit_lok <- lokerns(x,y, is.rand=F, hetero=F, x.out=newx)
+
+par(mfrow=c(2,1))
+plot(x,y, main="fitting whole range of data", col="gray", ylim=c(0,100))
+lines(newx, fit_glk$est, lty=1, col=1)
+lines(newx, fit_lok$est, lty=2, col=2)
+legend(6, 70, legend = c("glkerns", "lokerns"), lty=1:2, col=1:2, cex=0.6)
+
+plot(x,y, main="fitting central region of data", col="gray", xlim=c(-7,7),ylim=c(0,10))
+lines(newx, fit_glk$est, lty=1, col=1)
+lines(newx, fit_lok$est, lty=2, col=2)
+```
+### residual-time plot
+==> indp assumption is violated
+```{r}
+fit_glk2 <- glkerns(x,y, is.rand=F, hetero=F)
+fit_lok2 <- lokerns(x,y, is.rand=F, hetero=F)
+par(mfrow=c(2,1))
+plot.ts(residuals(fit_glk2), main="residual: glkerns") # equivalent to: plot.ts(y-fit_glk2$est[order(ox)])
+plot.ts(residuals(fit_lok2), main="residual: glkerns")
+```
+
+
+
+### plot local bandwidth
+in documentation: fit$bandwidth = local bandwidth array
+```{r}
+par(mfrow=c(1,1))
+plot(newx, fit_lok$bandwidth, type="l",main="local bandwidth of lokern", ylab="bw(x)")
+abline(h=fit_glk$bandwidth, col=2, lty=2) # golbal bw
+legend("topright", legend = c("lokerns", "glkerns"), lty=1:2, col=1:2)
+rug(x, col="gray")
+```
+
+remark:
+>the bandwidth is a function of x, in regions with many data points the local bw is small, in regions where data is sparse the local-bw is large. 
+
+
+
