@@ -1,0 +1,209 @@
+---
+title: "ex8"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## 1. heart disease
+
+The data: for each age xi, mi = nb of individuals of age xi, Ni=nb of individuals with heart disease among mi. 
+
+Goal: estimate P(have heart disease) = function of age i. 
+
+
+```{r}
+heart.dat <- read.table("http://stat.ethz.ch/Teaching/Datasets/heart.dat", header=T)
+```
+
+### b) contour plot of negative log-likelihood function neg.ll(beta0, beta1)
+
+function to calculate the neg LL of data: 
+```{r}
+# beta: c(beta0, beta1)
+# data: dataframe with col=(age, m, N)
+neg.ll <- function(beta, data){
+  lli <- log(choose(data$m, data$N)) + 
+    data$N * (beta[1]+beta[2]*data$age) -
+    data$m*log(1+exp(beta[1]+beta[2]*data$age)) # LL for ith observation
+  -sum(lli)
+}
+```
+
+plot the contour: 
+* we compute the -LL(beta) for a beta grid of 101x101 (10000 values), store them into a matrix of shape 101x101. 
+* use the param `levels` to control the contour picture: dense in level=50~200, sparse in level 300~2300
+
+```{r}
+beta0.grid <- seq(-10, 10, length = 101)
+beta1.grid <- seq(-1, 1, length=101)
+beta.grid <- cbind(beta0.grid, beta1.grid) # shape = 101*2
+neg.ll.values <- matrix(0, nrow=101, ncol=101)
+for(i in 1:101)
+  for(j in 1:101)
+    neg.ll.values[i,j] <- neg.ll(c(beta0.grid[i], beta1.grid[j]), heart.dat)
+contour(beta0.grid, beta1.grid, neg.ll.values,
+         levels=c(seq(50,200,50),seq(300,2300,200)))
+```
+
+### c) estimate param using glm
+use the R-hint in pb: 
+
+```{r}
+fit <- glm(cbind(N, m - N) ~ age, family = binomial, data = heart.dat)
+summary(fit)
+```
+remark:
+>beta_hat = [-5.0993, 0.1084] 
+>The infulence of the age is significant (p-value<0.001), the sign of beta_1 is positive meaning the logit increase with age, so the proba of heart disease is also increasing in age. 
+
+```{r}
+optim(c(0, 0), neg.ll, data = heart.dat)
+```
+  
+>beta_hat = [-5.0990932,  0.1083889], almost the same result.
+
+### d) plot proba_hat~age, and get quantile
+
+Plot the fit, to compute the quantile, do NOT use `quantile`, instead derive the inverse function: age=function(proba) :
+
+```{r}
+new.age <- seq(0, 100, length=200)
+new.pred <- predict(fit, newdata = data.frame(age = new.age), type = "response")
+plot( new.age, new.pred,
+      type="l", xlab="age", ylab="estimated heart-disease proba")
+points(heart.dat$age, heart.dat$N/heart.dat$m)
+ 
+beta_hat <-  c(-5.0993, 0.1084)
+perc <- (1:9)/10
+age.qtl <- (log(perc/(1-perc)) - beta_hat[1]) / beta_hat[2]
+for(i in 1:9)
+  lines( c(-10, age.qtl[i], age.qtl[i]), c(perc[i], perc[i], -1), lty=2)
+```
+
+
+## 2. ozone
+cannot install gss? 
+
+```
+/usr/bin/ld: cannot find -llapack
+collect2: error: ld returned 1 exit status
+/usr/share/R/share/make/shlib.mk:6: recipe for target 'gss.so' failed
+make: *** [gss.so] Error 1
+```
+
+==> `sudo apt install liblapack-dev`
+
+
+```{r}
+# install.packages("gss")
+library(gss)
+data(ozone, package="gss")
+help(ozone, package="gss")
+```
+
+### a) overview of data
+log-transform the upo3, and remove outliers in wdsp. And have a look at the `pairs` function
+To get the index of the outlier, use `which.max`: 
+
+```{r}
+ozone$logupo3 <- log(ozone$upo3)
+d.ozone <- subset(ozone, select=-upo3)
+pairs(d.ozone, pch = ".",gap = 0.1)
+
+## delete outlier
+out <- which.max(d.ozone$wdsp)
+d.ozone.e <- d.ozone[-out,]
+```
+
+remarks:  
+>To avoid heteroscedastic errors, we take the log-tranform of upo3. 
+
+### b) linear regression of degree=5, and additive model
+
+For additive model, see setion 7.2 in notes. 
+
+```{r}
+## package for formula
+require(sfsmisc)
+## Linear models
+## fit 1 (polynomial of degree 1)
+form1 <- logupo3~.
+fit1 <- lm(form1, data=d.ozone.e)
+
+
+## fits of degree 2 to 5
+form2 <- wrapFormula(form1, data=d.ozone.e, wrapString="poly(*,degree=2)")
+fit2 <- lm(form2, data=d.ozone.e)
+form3 <- wrapFormula(form1, data=d.ozone.e, wrapString="poly(*,degree=3)")
+fit3 <- lm(form3, data=d.ozone.e)
+form4 <- wrapFormula(form1, data=d.ozone.e, wrapString="poly(*,degree=4)")
+fit4 <- lm(form4, data=d.ozone.e)
+form5 <- wrapFormula(form1, data=d.ozone.e, wrapString="poly(*,degree=5)")
+fit5 <- lm(form5, data=d.ozone.e)
+
+
+## GAM
+# install.packages("mgcv")
+require(mgcv)
+gamForm <- wrapFormula(form1, data=d.ozone.e)
+g1 <- gam(gamForm, data=d.ozone.e)
+summary(g1)
+```
+
+### c) plot the fits
+
+Plot for the linear models. 
+
+In the function `termplot`, it's possible to plot the pointwise residuals by setting `partial.resid`:
+
+```{r}
+## plot the fits
+par(mfrow=c(3,3))
+termplot(fit1, partial.resid=T, col.res=adjustcolor("gray", 0.5), # plot pointwise residuals
+         se=T, pch=19, ask=F)
+termplot(fit2, partial.resid=T, col.res=adjustcolor("gray", 0.5), 
+         se=T, pch=19, ask=F)
+termplot(fit3, partial.resid=T, col.res=adjustcolor("gray", 0.5), 
+         se=T, pch=19, ask=F)
+termplot(fit4, partial.resid=T, col.res=adjustcolor("gray", 0.5), 
+         se=T, pch=19, ask=F)
+termplot(fit5, partial.resid=T, col.res=adjustcolor("gray", 0.5), 
+         se=T, pch=19, ask=F)
+```
+Remarks:  
+>the plot for deg=3,4,5 don't differ much, a ploy of deg=2 is already a good fit, we choose d=2 as it is not too complicated, but model selection by eye is not the best practice. 
+
+
+Plot fit for the additive model: 
+
+```{r}
+require(sfsmisc)
+mult.fig(nr.plots = 9, main="gam(gamForm, data = d.ozone.e)")
+plot(g1, shade = TRUE)
+```
+Remark:  
+>Using glm, the degrees for each predictors are different, some are linear, some are of higher degree. This way we reduce the model complexity and in the same time address the complexity accordingly. 
+
+### d) model selection using Mallows Cp
+
+```{r}
+## Mallows Cp function
+Cp <- function(object,sigma=summary(fit5)$sigma){
+  res<-residuals(object)
+  n <- length(res)
+  p <- n-object$df.residual
+  SSE <- sum(res^2)
+  SSE/sigma^2-n+2*p
+}
+```
+The param sigma is in `summary(fit5)$sigma`
+
+```{r}
+c(Cp(fit1), Cp(fit2), Cp(fit3), Cp(fit4), Cp(fit5), Cp(g1))
+```
+
+Remarks:
+>In linear models the deg=3 has lowest Cp, among all 6 models, the glm model performs best (by Cp).
