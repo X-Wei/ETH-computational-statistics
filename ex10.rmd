@@ -1,0 +1,126 @@
+---
+title: "ex10: classification with CART"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## a) generate and plot a clf tree
+```{r}
+## load the data:
+vehicle <- read.table("http://stat.ethz.ch/Teaching/Datasets/NDK/vehicle.dat",
+                   header = TRUE)
+
+# install.packages("rpart")
+## train a full grown tree:
+require(rpart)
+set.seed(10)
+tree <- rpart(Class~., data = vehicle,
+              control = rpart.control(cp = 0.0, minsplit = 30))
+
+# install.packages("rpart.plot")
+## nice package for plotting trees:
+require(rpart.plot)
+prp(tree, extra=1, type=1, 
+    box.col=c('pink', 'palegreen3', 
+              'lightsteelblue 2','lightgoldenrod 1')[tree$frame$yval])
+```
+Remark: 
+>The resulting tree overfits: many terminal nodes contain only very small nb of datapoints. 
+
+## b) prune the tree: one-s.e. rule
+
+
+### complexity-cost plot
+functions: `plotcp`, `printcp`, `prune.rpart`. 
+
+```{r}
+plotcp(tree)
+printcp(tree)
+```
+
+### one-stderr rule
+==> so the min x-err is 0.39347, its std=0.021894, according to the one-s.e. rule, the threshold is 0.39347+0.021894 = 0.415364. Choose smallest tree with xerr<threshold. 
+==> pick cp=0.0128866. (or use `cp=tree$cptable[7,"CP"]`)
+
+### prune the original tree
+use this cp to prune the tree in a):
+```{r}
+pruned.tree <- prune.rpart(tree, cp=0.0128866)
+prp(pruned.tree, extra=1, type=1, 
+    box.col=c('pink', 'palegreen3', 
+              'lightsteelblue 2','lightgoldenrod 1')[tree$frame$yval])
+```
+
+## c) calculate misclf rate of pruned tree
+cannot use `fitted` on a tree, instead, using `residual` is possible. 
+Otherwise, using `predict` should specify the parameter `type="class"` (see doc for predict.rpart)
+
+```{r}
+mean(resid(tree))
+mean(resid(pruned.tree))
+```
+The pruned tree has larger misclf rate than the overfitted original tree. 
+
+## d) bootstrap-generr and looCV err
+
+```{r}
+misclass.sample <- function(data, ind.training, ind.test){
+  tree <- rpart(Class~., data=data[ind.training,],
+                control = rpart.control(cp = 0.0, minsplit = 30))
+  
+  ## choose optimal cp according to 1-std-error rule:
+  cp <- tree$cptable
+  min.ind <- which.min(cp[,"xerror"])
+  min.lim <- cp[min.ind, "xerror"] + cp[min.ind, "xstd"]
+  cp.opt <- cp[(cp[,"xerror"] < min.lim),"CP"][1]
+
+  ## prune the tree:
+  tree.sample <- prune.rpart(tree, cp=cp.opt)
+  
+  ## return missclassifcation error:
+  mean(data$Class[ind.test] != predict(tree.sample, newdata=data[ind.test,], type="class"))
+}
+
+
+## Bootstrap error:
+B <- 1000
+n <- nrow(vehicle)
+boot.err <- function(data, ind) {
+  misclass.sample(data, ind, 1:nrow(data))
+}
+
+boot.samples <- replicate(B, boot.err(vehicle, sample(1:n, n, replace=T)))
+errboot <- mean(boot.samples)
+print(errboot)
+
+## CV-error:
+
+cv.err <- function(data, ind){
+  misclass.sample(data, -ind, ind) 
+}
+
+cv.samples <- sapply(1:n, cv.err, data = vehicle) # loo CV
+errcv <- mean(cv.samples)
+print(errcv)
+```
+
+Remark:
+>The (standard) bootstrap gen-err tend to underestimate the gen-err, because some of the datapoints in testset is also in training set.
+
+
+## e) OOB bootstrap gen-err
+```{r}
+oobs.err <- function(data, ind){
+  misclass.sample(data, ind, -ind)
+}
+
+obs.samples <- replicate(B, oobs.err(vehicle, sample(1:n, n, replace=T)))
+erroobs <- mean(obs.samples)
+print(erroobs)
+```
+
+Remark: 
+>The oob err is larger than standard bs gen-err, and closer to the CV value. 
