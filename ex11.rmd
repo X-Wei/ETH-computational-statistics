@@ -1,0 +1,92 @@
+
+title: "ex11: lasso, ridge and elastic net"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## a) preprocessing 
+the same as in ex9: 
+```{r}
+data(ozone, package="gss")
+d.ozone <- subset(transform(ozone, logupo3= log(upo3)), select = -upo3)
+d.ozone.e <- d.ozone[-which.max(d.ozone[,"wdsp"]),] # remove outlier
+```
+
+## b) generate formula and according design matrix for penalized regression
+
+A cubic penalized regression model that accounts for all 3-way interactions --> ???
+
+```{r}
+require(sfsmisc)
+ff <- wrapFormula(logupo3 ~ ., data=d.ozone.e, wrapString="poly(*,degree=3)")
+ff <- update(ff, logupo3 ~ .^3)
+mm <- model.matrix(ff, data=d.ozone.e)
+```
+
+
+## c) ridge and lasso
+```{r}
+# install.packages("glmnet")
+library(glmnet)
+ridge <- glmnet(mm, d.ozone.e$logupo3, alpha=0)
+summary(ridge)
+lasso <- glmnet(mm, d.ozone.e$logupo3, alpha=1)
+summary(lasso)
+```
+
+Plot the coeffs as a function of lambda. 
+```{r}
+par(mfrow=c(1,2))
+plot(ridge, xvar="lambda", main="ridge")
+plot(lasso, xvar="lambda", main="lasso")
+```
+Remark:
+>The plot shows the difference properties of the 2: in ridge as lambda goes up, the coeffs do not suddenly become 0; in lasso, as lambda goes up, more and more coeff vanish. 
+
+
+## d) select best lambda: 10-fold CV, and 1-s.e. rule by MSE-log(lambda) plot
+Look at the documentation for cv.glmnet: the resulting object has a `lambda.1se` -- largest value of lambda such that error is within 1 standard error of the minimum.
+```{r}
+set.seed(1)
+par(mfrow=c(1,1))
+cv.eln <- cv.glmnet(mm, d.ozone.e$logupo3, alpha=0.5, nfolds=10)
+plot(cv.eln)
+print(cv.eln$lambda.1se)
+```
+
+==> selected lambda=0.10883
+
+## e) compare with gam
+recover the CV score for best lambda: 
+```{r}
+cv.eln$cvm[ which( cv.eln$lambda==cv.eln$lambda.1se ) ]
+```
+
+```{r}
+require(mgcv)
+gamForm <- wrapFormula(logupo3~., data=d.ozone.e)
+g1 <- gam(gamForm, data=d.ozone.e)
+summary(g1)
+```
+
+==> gcv(gam) is 0.106, the cv score of chosen eln is 0.1404. Both scores are quite small, but they are not directly comparable as a different type of CV was used in each of them. 
+
+Therefore, one would have to compute the same type of CV for both methods and compare their scores. ==> write code to calculate 10-cv for gam:
+
+```{r}
+n <- nrow(d.ozone.e)
+cv.MSE <- numeric(10)
+for(i in 1:10){
+  ind.test <- as.integer(n*(i-1)/10+1):as.integer(n*i/10)
+  fit <- gam(gamForm, data=d.ozone.e[-ind.test,])
+  pred <- predict.gam(fit, newdata=d.ozone.e[ind.test,])
+  cv.MSE[i] <- mean( (d.ozone.e$logupo3[ind.test]-pred)^2 )
+}
+print(mean(cv.MSE))
+```
+==> thus maybe gam is better. 
+
+
