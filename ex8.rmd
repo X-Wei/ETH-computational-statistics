@@ -1,5 +1,5 @@
 ---
-title: "ex8"
+title: "ex8: max Likelihood and gam(additive model) VS lm of polynomes"
 output: html_document
 ---
 
@@ -206,4 +206,4 @@ c(Cp(fit1), Cp(fit2), Cp(fit3), Cp(fit4), Cp(fit5), Cp(g1))
 ```
 
 Remarks:
->In linear models the deg=3 has lowest Cp, among all 6 models, the glm model performs best (by Cp).
+>In linear models the deg=3 has lowest Cp, among all 6 models, the gam model performs best (by Cp).

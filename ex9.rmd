@@ -1,5 +1,5 @@
 ---
-title: "ex9: PPR and MARS on ozone data"
+title: "ex9: MARS, PPR and gam on ozone data"
 output: html_document
 ---
 
@@ -42,13 +42,22 @@ fit.MARS <- earth(logO3~., data=d.ozone.es, degree=2)
 summary(fit.MARS)
 ```
 
-plot the main effects and then the interactions using `plotmo`
+MARS involves interactions terms, as we can seen from the summary. 
+
+plot the MARS fit using `plotmo`:
 ```{r}
-plotmo(fit.MARS, degree2=F, main="main effects")
-plotmo(fit.MARS, degree1=F, main="interactions")
+plotmo(fit.MARS, degree2=F)
+title(main="main effects")
+
+plotmo(fit.MARS, degree1=F)
+title(main="interactions")
 ```
 
 ## c) fit with PPR
+PPR fits q(`nterms`) NP regressors(`"supsmu", "spline", "gcvspline"`), each on a projection direction (alpha_i). 
+
+![](ex9/ppr.png)
+
 To plot the fit (4 terms, 4 ridge functions to plot), use `sfsmisc::mult.fig` to setup plot par. 
 ```{r}
 fit.PPR <- ppr(logO3~., data=d.ozone.es, nterms=4)
@@ -116,9 +125,20 @@ for(i in seq_along(deg.grid))
   cv.scores$mars[i] <- cv(earth, degree=deg.grid[i], trace=F)
 ```
 
-add the gam model: 
+The gam model: gam fits a NP regressor for each predictor xj and add them up. 
+
+and it use different df for different xj, as shown in `edf` column of the summary. 
+
 ```{r}
 library(mgcv)
+fit.gam <- gam( wrapFormula(logO3~., data = d.ozone.es), data=d.ozone.es) # for gam, have to first wrapFormula instead of passing directly logO3~. 
+summary(fit.gam)
+par(mfrow=c(3,3))
+plot(fit.gam, shade=T)
+```
+
+
+```{r}
 wrapGam <- function(formula, data,...){
   gamForm <- wrapFormula(formula, data = data)
   gam(gamForm, data=data, ...)
