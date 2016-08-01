@@ -1,5 +1,5 @@
 ---
-title: "ex1: intro"
+title: "ex1: lm, var(beta)"
 output: html_document
 ---
 
@@ -23,6 +23,11 @@ for(i in 1:100){
 ```
 
 ## b. draw historgram of slopes
+
+
+Theoritical variance: according to 1.4.2:
+
+![](ex1/var(beta).png)
 
 ```{r}
 par(mfrow=c(1,2)) # two plots in a row 
@@ -59,7 +64,7 @@ sd(slopes2)
 lines(points, dnorm(points, mean = 2, sd = tsd))
 ```
 
-The approximation fit well because of the central limit theorem. 
+==> The approximation fit well because of the central limit theorem. 
 
 
 # pb3 airline

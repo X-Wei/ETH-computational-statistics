@@ -1,5 +1,5 @@
 ---
-title: "ex4: BMW return"
+title: "ex4: NP regression: NW(and glkerns, lokerns), LP, SS"
 output: html_document
 ---
 
@@ -115,7 +115,24 @@ plot.ts(y-fitted_ss, main="residuals-SS")
 ```
 
 * Tukey-Anscombe plot
+
+```{r}
+par(mfrow=c(3,1))
+# plot.ts is just plot(y-fitted_nw, main="residuals-NW", type="l"), with xlb="Time"
+plot(fitted_nw, y-fitted_nw, main="Tukey-Anscombe-NW")
+plot(fitted_lp, y-fitted_lp, main="Tukey-Anscombe-LP")
+plot(fitted_ss, y-fitted_ss, main="Tukey-Anscombe-SS")
+```
+
 ==> large outliers
+
+```{r}
+par(mfrow=c(3,1))
+# plot.ts is just plot(y-fitted_nw, main="residuals-NW", type="l"), with xlb="Time"
+plot(fitted_nw, y-fitted_nw, main="Tukey-Anscombe-NW", ylim=c(-10,100), xlim=c(0,20))
+plot(fitted_lp, y-fitted_lp, main="Tukey-Anscombe-LP", ylim=c(-10,100), xlim=c(0,20))
+plot(fitted_ss, y-fitted_ss, main="Tukey-Anscombe-SS", ylim=c(-10,100), xlim=c(0,20))
+```
 
 * plot estimated volality (sqrt of the fitted value -- volality is s.d., not variance)
 ```{r}

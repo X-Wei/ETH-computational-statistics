@@ -1,5 +1,5 @@
 ---
-title: "ex2"
+title: "ex2: lm(+assumption checking, model selection); NP density estimation"
 output: html_document
 ---
 
@@ -64,12 +64,15 @@ plot(fitted(mortal.full), residuals(mortal.full),xlab="fitted value", ylab="resi
 abline(h=0, lty=2)
 ```
 
+==> linear assumption is valid. (error has 0 mean)
 
 ### QQ plot: empirical quantile VS standard quantiles
 ```{r}
 qqnorm(resid(mortal.full), xlab="standard normal quantiles", ylab="empirical quantiles")
 qqline(resid(mortal.full), lty=2)
 ```
+
+==> the error is normal N(mu, sigma2), intercept=mu~0, slope=sigma
 
 look at the fitting summary: 
 ```{r}
@@ -90,11 +93,12 @@ motal.fw <- step(mortal.empty, dir="forward", scope = list(upper=mortal.full,low
 ```
 
 ### all-subsets regression
-Both fw and bw are greedy algorithms, in each step it adds variables and never deletes them, although an addition of a new variable may render one or more of the already added variables non-significant. 
+Both fw and bw are greedy algorithms, in each step it adds variables and never deletes them, although **an addition of a new variable may render one or more of the already added variables non-significant.** 
 
 Use the `leaps` package. 
 
 ```{r}
+# install.packages("leaps")
 library(leaps)
 mortal.alls <- regsubsets(Mortality~., data=mortality, nvmax=9)
 
@@ -186,10 +190,4 @@ Then plot the bandwith VS quality curve, also plot the selected bandwidth select
 plot(2^seq(-5,1,0.2), results[-length(bandwidths)],xlab="bandwidth", ylab="quality", main="Guassian kernel result")
 points(sj.mean, results[length(bandwidths)], col="red")
 ```
-
-
-
-
-
-
 

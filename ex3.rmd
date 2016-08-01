@@ -1,5 +1,5 @@
 ---
-title: "ex3"
+title: "ex3: NP reg comparison (NW, LP, SS), variance of Yhat"
 output: html_document
 ---
 
@@ -29,7 +29,7 @@ for(i in 1:nrep){
 }
 ```
 
-calculate mean of estimations at design points m_hat(x), and calculate the bias = m_hat(x)-m(x), and calculate the variance of m_hat(x): 
+calculate mean of estimations at design points `m_hat(x)`, and calculate the bias = `m_hat(x)-m(x)`, and calculate the variance of `m_hat(x)`: 
 ```{r}
 means <- cbind(apply(estnw,1,mean), apply(estlp,1,mean), apply(estss,1,mean))
 bias <- means - m(x)
